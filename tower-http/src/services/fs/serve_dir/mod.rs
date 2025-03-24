@@ -16,6 +16,7 @@ use std::{
     task::{Context, Poll},
 };
 use tower_service::Service;
+use tracing::instrument;
 
 pub(crate) mod future;
 mod headers;
@@ -63,6 +64,7 @@ pub struct ServeDir<F = DefaultServeDirFallback> {
 
 impl ServeDir<DefaultServeDirFallback> {
     /// Create a new [`ServeDir`].
+    #[instrument(skip(path))]
     pub fn new<P>(path: P) -> Self
     where
         P: AsRef<Path>,
@@ -82,6 +84,7 @@ impl ServeDir<DefaultServeDirFallback> {
         }
     }
 
+    #[instrument(skip(path))]
     pub(crate) fn new_single_file<P>(path: P, mime: HeaderValue) -> Self
     where
         P: AsRef<Path>,
@@ -103,6 +106,7 @@ impl<F> ServeDir<F> {
     /// This is useful for static sites.
     ///
     /// Defaults to `true`.
+    #[instrument(skip(self))]
     pub fn append_index_html_on_directories(mut self, append: bool) -> Self {
         match &mut self.variant {
             ServeVariant::Directory {
@@ -118,6 +122,7 @@ impl<F> ServeDir<F> {
     /// Set a specific read buffer chunk size.
     ///
     /// The default capacity is 64kb.
+    #[instrument(skip(self))]
     pub fn with_buf_chunk_size(mut self, chunk_size: usize) -> Self {
         self.buf_chunk_size = chunk_size;
         self
@@ -133,6 +138,7 @@ impl<F> ServeDir<F> {
     /// the uncompressed version will be served instead.
     /// Both the precompressed version and the uncompressed version are expected
     /// to be present in the directory. Different precompressed variants can be combined.
+    #[instrument(skip(self))]
     pub fn precompressed_gzip(mut self) -> Self {
         self.precompressed_variants
             .get_or_insert(Default::default())
@@ -150,6 +156,7 @@ impl<F> ServeDir<F> {
     /// the uncompressed version will be served instead.
     /// Both the precompressed version and the uncompressed version are expected
     /// to be present in the directory. Different precompressed variants can be combined.
+    #[instrument(skip(self))]
     pub fn precompressed_br(mut self) -> Self {
         self.precompressed_variants
             .get_or_insert(Default::default())
@@ -167,6 +174,7 @@ impl<F> ServeDir<F> {
     /// the uncompressed version will be served instead.
     /// Both the precompressed version and the uncompressed version are expected
     /// to be present in the directory. Different precompressed variants can be combined.
+    #[instrument(skip(self))]
     pub fn precompressed_deflate(mut self) -> Self {
         self.precompressed_variants
             .get_or_insert(Default::default())
@@ -184,6 +192,7 @@ impl<F> ServeDir<F> {
     /// the uncompressed version will be served instead.
     /// Both the precompressed version and the uncompressed version are expected
     /// to be present in the directory. Different precompressed variants can be combined.
+    #[instrument(skip(self))]
     pub fn precompressed_zstd(mut self) -> Self {
         self.precompressed_variants
             .get_or_insert(Default::default())
@@ -209,6 +218,7 @@ impl<F> ServeDir<F> {
     ///     // respond with `not_found.html` for missing files
     ///     .fallback(ServeFile::new("assets/not_found.html"));
     /// ```
+    #[instrument(skip(self, new_fallback))]
     pub fn fallback<F2>(self, new_fallback: F2) -> ServeDir<F2> {
         ServeDir {
             base: self.base,
@@ -237,6 +247,7 @@ impl<F> ServeDir<F> {
     /// ```
     ///
     /// Setups like this are often found in single page applications.
+    #[instrument(skip(self, new_fallback))]
     pub fn not_found_service<F2>(self, new_fallback: F2) -> ServeDir<SetStatus<F2>> {
         self.fallback(SetStatus::new(new_fallback, StatusCode::NOT_FOUND))
     }
@@ -244,6 +255,7 @@ impl<F> ServeDir<F> {
     /// Customize whether or not to call the fallback for requests that aren't `GET` or `HEAD`.
     ///
     /// Defaults to not calling the fallback and instead returning `405 Method Not Allowed`.
+    #[instrument(skip(self))]
     pub fn call_fallback_on_method_not_allowed(mut self, call_fallback: bool) -> Self {
         self.call_fallback_on_method_not_allowed = call_fallback;
         self
@@ -303,6 +315,7 @@ impl<F> ServeDir<F> {
     ///     }
     /// }
     /// ```
+    #[instrument(skip(self, req))]
     pub fn try_call<ReqBody, FResBody>(
         &mut self,
         req: Request<ReqBody>,
@@ -398,6 +411,7 @@ where
     type Future = InfallibleResponseFuture<ReqBody, F>;
 
     #[inline]
+    #[instrument(skip(self))]
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         if let Some(fallback) = &mut self.fallback {
             fallback.poll_ready(cx)
@@ -406,6 +420,7 @@ where
         }
     }
 
+    #[instrument(skip(self, req))]
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         let future = self
             .try_call(req)
@@ -450,6 +465,7 @@ enum ServeVariant {
 }
 
 impl ServeVariant {
+    #[instrument]
     fn build_and_validate_path(&self, base_path: &Path, requested_path: &str) -> Option<PathBuf> {
         match self {
             ServeVariant::Directory {
@@ -505,10 +521,12 @@ where
     type Error = Infallible;
     type Future = InfallibleResponseFuture<ReqBody, Self>;
 
+    #[instrument]
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         match self.0 {}
     }
 
+    #[instrument(skip(_req))]
     fn call(&mut self, _req: Request<ReqBody>) -> Self::Future {
         match self.0 {}
     }
@@ -523,18 +541,22 @@ struct PrecompressedVariants {
 }
 
 impl SupportedEncodings for PrecompressedVariants {
+    #[instrument]
     fn gzip(&self) -> bool {
         self.gzip
     }
 
+    #[instrument]
     fn deflate(&self) -> bool {
         self.deflate
     }
 
+    #[instrument]
     fn br(&self) -> bool {
         self.br
     }
 
+    #[instrument]
     fn zstd(&self) -> bool {
         self.zstd
     }
