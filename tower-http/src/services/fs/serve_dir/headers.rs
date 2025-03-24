@@ -1,10 +1,12 @@
 use http::header::HeaderValue;
 use httpdate::HttpDate;
 use std::time::SystemTime;
+use tracing::instrument;
 
 pub(super) struct LastModified(pub(super) HttpDate);
 
 impl From<SystemTime> for LastModified {
+    #[instrument]
     fn from(time: SystemTime) -> Self {
         LastModified(time.into())
     }
@@ -14,11 +16,13 @@ pub(super) struct IfModifiedSince(HttpDate);
 
 impl IfModifiedSince {
     /// Check if the supplied time means the resource has been modified.
+    #[instrument(skip(self, last_modified))]
     pub(super) fn is_modified(&self, last_modified: &LastModified) -> bool {
         self.0 < last_modified.0
     }
 
     /// convert a header value into a IfModifiedSince, invalid values are silentely ignored
+    #[instrument]
     pub(super) fn from_header_value(value: &HeaderValue) -> Option<IfModifiedSince> {
         std::str::from_utf8(value.as_bytes())
             .ok()
@@ -31,11 +35,13 @@ pub(super) struct IfUnmodifiedSince(HttpDate);
 
 impl IfUnmodifiedSince {
     /// Check if the supplied time passes the precondtion.
+    #[instrument(skip(self, last_modified))]
     pub(super) fn precondition_passes(&self, last_modified: &LastModified) -> bool {
         self.0 >= last_modified.0
     }
 
     /// Convert a header value into a IfModifiedSince, invalid values are silentely ignored
+    #[instrument]
     pub(super) fn from_header_value(value: &HeaderValue) -> Option<IfUnmodifiedSince> {
         std::str::from_utf8(value.as_bytes())
             .ok()

@@ -21,6 +21,7 @@ use std::{
     task::{ready, Context, Poll},
 };
 use tower_service::Service;
+use tracing::instrument;
 
 pin_project! {
     /// Response future of [`ServeDir::try_call()`][`super::ServeDir::try_call()`].
@@ -31,6 +32,7 @@ pin_project! {
 }
 
 impl<ReqBody, F> ResponseFuture<ReqBody, F> {
+    #[instrument(skip(future, fallback_and_request))]
     pub(super) fn open_file_future(
         future: BoxFuture<'static, io::Result<OpenFileOutput>>,
         fallback_and_request: Option<(F, Request<ReqBody>)>,
@@ -43,6 +45,7 @@ impl<ReqBody, F> ResponseFuture<ReqBody, F> {
         }
     }
 
+    #[instrument(skip(fallback_and_request))]
     pub(super) fn invalid_path(fallback_and_request: Option<(F, Request<ReqBody>)>) -> Self {
         Self {
             inner: ResponseFutureInner::InvalidPath {
@@ -51,6 +54,7 @@ impl<ReqBody, F> ResponseFuture<ReqBody, F> {
         }
     }
 
+    #[instrument]
     pub(super) fn method_not_allowed() -> Self {
         Self {
             inner: ResponseFutureInner::MethodNotAllowed,
@@ -85,6 +89,7 @@ where
 {
     type Output = io::Result<Response<ResponseBody>>;
 
+    #[instrument(skip(self, cx))]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
             let mut this = self.as_mut().project();
@@ -175,6 +180,7 @@ where
     }
 }
 
+#[instrument]
 fn response_with_status(status: StatusCode) -> Response<ResponseBody> {
     Response::builder()
         .status(status)
@@ -182,10 +188,12 @@ fn response_with_status(status: StatusCode) -> Response<ResponseBody> {
         .unwrap()
 }
 
+#[instrument]
 fn not_found() -> Response<ResponseBody> {
     response_with_status(StatusCode::NOT_FOUND)
 }
 
+#[instrument(skip(fallback, req))]
 pub(super) fn call_fallback<F, B, FResBody>(
     fallback: &mut F,
     req: Request<B>,
@@ -216,6 +224,7 @@ where
     ResponseFutureInner::FallbackFuture { future }
 }
 
+#[instrument(skip(output))]
 fn build_response(output: FileOpened) -> Response<ResponseBody> {
     let (maybe_file, size) = match output.extent {
         FileRequestExtent::Full(file, meta) => (Some(file), meta.len()),
@@ -308,11 +317,13 @@ fn build_response(output: FileOpened) -> Response<ResponseBody> {
     }
 }
 
+#[instrument]
 fn body_from_bytes(bytes: Bytes) -> ResponseBody {
     let body = Full::from(bytes).map_err(|err| match err {}).boxed_unsync();
     ResponseBody::new(UnsyncBoxBody::new(body))
 }
 
+#[instrument]
 fn empty_body() -> ResponseBody {
     let body = Empty::new().map_err(|err| match err {}).boxed_unsync();
     ResponseBody::new(UnsyncBoxBody::new(body))

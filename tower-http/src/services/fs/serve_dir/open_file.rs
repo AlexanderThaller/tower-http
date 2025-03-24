@@ -15,6 +15,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tokio::{fs::File, io::AsyncSeekExt};
+use tracing::instrument;
 
 pub(super) enum OpenFileOutput {
     FileOpened(Box<FileOpened>),
@@ -38,6 +39,7 @@ pub(super) enum FileRequestExtent {
     Head(Metadata),
 }
 
+#[instrument]
 pub(super) async fn open_file(
     variant: ServeVariant,
     mut path_to_file: PathBuf,
@@ -140,6 +142,7 @@ pub(super) async fn open_file(
     }
 }
 
+#[instrument(skip(modified, if_unmodified_since, if_modified_since))]
 fn check_modified_headers(
     modified: Option<&LastModified>,
     if_unmodified_since: Option<IfUnmodifiedSince>,
@@ -172,6 +175,7 @@ fn check_modified_headers(
 
 // Returns the preferred_encoding encoding and modifies the path extension
 // to the corresponding file extension for the encoding.
+#[instrument]
 fn preferred_encoding(
     path: &mut PathBuf,
     negotiated_encoding: &[(Encoding, QValue)],
@@ -199,6 +203,7 @@ fn preferred_encoding(
 // Attempts to open the file with any of the possible negotiated_encodings in the
 // preferred order. If none of the negotiated_encodings have a corresponding precompressed
 // file the uncompressed file is used as a fallback.
+#[instrument]
 async fn open_file_with_fallback(
     mut path: PathBuf,
     mut negotiated_encoding: Vec<(Encoding, QValue)>,
@@ -226,6 +231,7 @@ async fn open_file_with_fallback(
 // Attempts to get the file metadata with any of the possible negotiated_encodings in the
 // preferred order. If none of the negotiated_encodings have a corresponding precompressed
 // file the uncompressed file is used as a fallback.
+#[instrument]
 async fn file_metadata_with_fallback(
     mut path: PathBuf,
     mut negotiated_encoding: Vec<(Encoding, QValue)>,
@@ -250,6 +256,7 @@ async fn file_metadata_with_fallback(
     Ok((file, encoding))
 }
 
+#[instrument]
 async fn maybe_redirect_or_append_path(
     path_to_file: &mut PathBuf,
     uri: &Uri,
@@ -273,6 +280,7 @@ async fn maybe_redirect_or_append_path(
     }
 }
 
+#[instrument]
 fn try_parse_range(
     maybe_range_ref: Option<&str>,
     file_size: u64,
@@ -283,12 +291,14 @@ fn try_parse_range(
     })
 }
 
+#[instrument]
 async fn is_dir(path_to_file: &Path) -> bool {
     tokio::fs::metadata(path_to_file)
         .await
         .map_or(false, |meta_data| meta_data.is_dir())
 }
 
+#[instrument]
 fn append_slash_on_path(uri: Uri) -> Uri {
     let http::uri::Parts {
         scheme,
